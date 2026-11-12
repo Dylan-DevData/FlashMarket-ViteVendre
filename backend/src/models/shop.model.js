@@ -22,7 +22,7 @@ async function findByOwnerId(ownerId) {
 
 async function findPublicBySlug(slug) {
   const { rows } = await query(
-    `SELECT s.id, s.name, s.slug, s.description, s.logo_url, s.city_id,
+    `SELECT s.id, s.name, s.slug, s.description, s.logo_url, s.city_id, s.whatsapp,
             c.name AS city, u.full_name AS owner_name, u.avatar_url AS owner_avatar_url,
             COALESCE((
               SELECT jsonb_agg(jsonb_build_object(

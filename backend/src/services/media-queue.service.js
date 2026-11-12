@@ -20,6 +20,14 @@ function enqueue(mediaId) {
   runNext();
 }
 
+/**
+ * Traite un média en arrière-plan (Image via Sharp ou Vidéo via FFmpeg) :
+ * 1. Verrouille le média en base pour éviter les traitements concurrents.
+ * 2. Déclenche le transcodage HLS et FastStart via `processVideo`.
+ * 3. Calcule l'empreinte perceptuelle pHash pour la modération.
+ * 4. Publie l'annonce si tous ses médias sont prêts.
+ * 5. SUPPRIME le fichier source temporaire lourd dans `uploads/` pour libérer le disque.
+ */
 async function processOne(mediaId) {
   const releaseLock = await mediaModel.acquireProcessingLock(mediaId);
   if (!releaseLock) return;
@@ -35,6 +43,7 @@ async function processOne(mediaId) {
       String(mediaId)
     );
     try {
+      // Exécute le transcodage vidéo (FFmpeg HLS + MP4 FastStart) ou la compression image (Sharp WebP)
       const processed = media.kind === 'video'
         ? await processVideo(sourcePath, mediaId)
         : await processImage(sourcePath, mediaId);
@@ -42,7 +51,11 @@ async function processOne(mediaId) {
         ? path.join(mediaDir, processed.posterKey)
         : path.join(mediaDir, processed.storageKey);
       const phash = await perceptualHash(fingerprintPath);
+      
+      // Enregistre les métadonnées et publie l'annonce si tout est prêt
       await mediaModel.completeAndMaybePublish(mediaId, { ...processed, phash });
+
+      // NETTOYAGE : suppression du fichier source brut original pour libérer l'espace disque
       await fs.unlink(sourcePath).catch((error) => {
         if (error.code !== 'ENOENT') logger.error('media_source_cleanup_failed', { mediaId, message: error.message });
       });

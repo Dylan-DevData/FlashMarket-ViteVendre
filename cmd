@@ -1,0 +1,1 @@
+bon  je voulais que  en  version  web  ou  mobile  on a un systeme de scrol lqui  prend toute l'ecran    comme titok et lnos informations sont   a droite et  aussi  la boutique il faut bien  aranger dont  corrige   len frontend 

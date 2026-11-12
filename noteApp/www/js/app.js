@@ -18,7 +18,7 @@ import { icon } from './ui/icons.js';
   const CITY_STORAGE_KEY = 'flashmarket.cityId';
   const THEME_STORAGE_KEY = 'flashmarket.theme';
   const FAVORITES_STORAGE_KEY = 'flashmarket.favorites';
-  const ONBOARDING_STORAGE_KEY = 'flashmarket.onboardingDone';
+  const ONBOARDING_STORAGE_KEY = 'flashmarket.onboardingDone.v3';
   const CATALOG_CACHE_KEY = 'catalog.v1';
   const CATALOG_CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
   const MAX_PHOTOS = 8;
@@ -30,7 +30,7 @@ import { icon } from './ui/icons.js';
 
   const state = {
     apiUrl: normalizeApiUrl(getDefaultApiOrigin()),
-    theme: getStored(THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light',
+    theme: getStored(THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark',
     token: getStored(TOKEN_STORAGE_KEY) || '',
     user: parseStoredUser(),
     cities: [],
@@ -57,6 +57,9 @@ import { icon } from './ui/icons.js';
     uploadResuming: false,
     activeHls: null,
     activeVideo: null,
+    videoMuted: true,
+    feedObserver: null,
+    controlsTimer: null,
     previewUrls: [],
     networkQuality: getNetworkSnapshot().quality,
     apiReachable: null,
@@ -115,6 +118,12 @@ import { icon } from './ui/icons.js';
     setStored(ONBOARDING_STORAGE_KEY, 'true');
     if (elements['onboarding-dialog'].open) elements['onboarding-dialog'].close();
     if (!state.cityId && !elements['city-dialog'].open) elements['city-dialog'].showModal();
+  }
+
+  function replayOnboarding() {
+    removeStored(ONBOARDING_STORAGE_KEY);
+    syncOnboarding(0, false);
+    if (!elements['onboarding-dialog'].open) elements['onboarding-dialog'].showModal();
   }
 
   function syncOnboarding(index, scroll = true) {
@@ -213,7 +222,8 @@ import { icon } from './ui/icons.js';
       'account-avatar', 'account-content', 'auth-dialog', 'auth-form', 'auth-title',
       'auth-description', 'auth-phone', 'auth-password', 'auth-name', 'auth-city',
       'register-fields', 'auth-submit', 'auth-message', 'publish-dialog',
-      'publish-content', 'search-toggle', 'search-form', 'search-input', 'load-more',
+      'publish-content', 'search-toggle', 'search-form', 'search-input',
+      'immersive-search-toggle', 'search-close', 'load-more',
       'toast-region',
       'network-status',
       'favorites-page', 'favorites-list', 'onboarding-dialog', 'onboarding-track',
@@ -266,6 +276,19 @@ import { icon } from './ui/icons.js';
     document.addEventListener('click', handleClick);
     elements['feed-list'].addEventListener('click', handleVideoClick, true);
     elements['feed-list'].addEventListener('play', handleVideoClick, true);
+    elements['feed-list'].addEventListener('timeupdate', updateVideoProgress, true);
+    elements['feed-list'].addEventListener('durationchange', updateVideoProgress, true);
+    elements['feed-list'].addEventListener('loadedmetadata', updateVideoProgress, true);
+    elements['feed-list'].addEventListener('loadedmetadata', updateVideoLayout, true);
+    elements['feed-list'].addEventListener('canplay', updateVideoProgress, true);
+    elements['feed-list'].addEventListener('progress', updateVideoProgress, true);
+    elements['feed-list'].addEventListener('input', handleSeekInput);
+    elements['feed-list'].addEventListener('change', handleSeekInput);
+    elements['feed-list'].addEventListener('pointerdown', handleControlsActivity);
+    elements['feed-list'].addEventListener('pointermove', handleControlsActivity);
+    elements['feed-list'].addEventListener('pointerup', handleControlsActivity);
+    elements['feed-list'].addEventListener('pointercancel', handleControlsActivity);
+    window.addEventListener('resize', updateAllVideoLayouts, { passive: true });
     elements['favorites-list']?.addEventListener('click', handleVideoClick, true);
     elements['favorites-list']?.addEventListener('play', handleVideoClick, true);
     elements['city-button'].addEventListener('click', openCityPicker);
@@ -276,6 +299,10 @@ import { icon } from './ui/icons.js';
       elements['search-form'].classList.toggle('hidden');
       if (!elements['search-form'].classList.contains('hidden')) elements['search-input'].focus();
     });
+    elements['immersive-search-toggle'].addEventListener('click', () => {
+      setSearchVisibility(elements['search-form'].classList.contains('hidden'));
+    });
+    elements['search-close'].addEventListener('click', () => setSearchVisibility(false));
     elements['search-form'].addEventListener('submit', (event) => {
       event.preventDefault();
       state.search = elements['search-input'].value.trim();
@@ -283,6 +310,9 @@ import { icon } from './ui/icons.js';
     });
     elements['load-more'].addEventListener('click', loadMore);
     elements['onboarding-track'].addEventListener('scroll', scheduleOnboardingUpdate, { passive: true });
+    if ('IntersectionObserver' in window) {
+      state.feedObserver = new IntersectionObserver(handleFeedVisibility, { threshold: [0, 0.6] });
+    }
     elements['onboarding-dialog'].addEventListener('cancel', (event) => {
       event.preventDefault();
       finishOnboarding();
@@ -472,6 +502,7 @@ import { icon } from './ui/icons.js';
     state.page = 1;
     state.hasMore = true;
     disposeActiveVideo();
+    state.feedObserver?.disconnect();
     elements['feed-list'].innerHTML = loadingState();
     await fetchFeed(false, state.feedRequestId, state.feedController);
   }
@@ -499,7 +530,7 @@ import { icon } from './ui/icons.js';
         elements['load-more'].classList.add('hidden');
         return;
       }
-      const feedCity = state.feedNationwide ? 'all' : String(state.cityId);
+      let feedCity = state.feedNationwide ? 'all' : String(state.cityId);
       const params = new URLSearchParams({
         city_id: feedCity,
         page: String(state.page),
@@ -507,8 +538,7 @@ import { icon } from './ui/icons.js';
       });
       if (state.categoryId) params.set('category_id', String(state.categoryId));
       if (state.search) params.set('q', state.search);
-      const cacheKey = `feed.${feedCity}.${state.categoryId || 'all'}.${state.search || 'all'}.${state.page}`;
-      const result = await api(`/api/posts?${params.toString()}`, {
+      let result = await api(`/api/posts?${params.toString()}`, {
         signal: controller.signal,
         timeoutMs: 15000,
         retries: 0,
@@ -517,6 +547,31 @@ import { icon } from './ui/icons.js';
       if (!Array.isArray(result?.posts)) {
         throw new Error('Le serveur a renvoyé un fil d’annonces invalide.');
       }
+      if (!append && !state.feedNationwide && result.posts.length === 0) {
+        const fallbackParams = new URLSearchParams(params);
+        fallbackParams.set('city_id', 'all');
+        try {
+          const fallbackResult = await api(`/api/posts?${fallbackParams.toString()}`, {
+            signal: controller.signal,
+            timeoutMs: 15000,
+            retries: 0,
+          });
+          if (requestId !== state.feedRequestId) return;
+          if (Array.isArray(fallbackResult?.posts)) {
+            result = fallbackResult;
+            state.feedNationwide = true;
+            feedCity = 'all';
+            if (result.posts.length) {
+              const cityName = state.cities.find((city) => Number(city.id) === Number(state.cityId))?.name;
+              showToast(`Aucune annonce à ${cityName || 'proximité'} ; voici les annonces disponibles au Cameroun.`);
+            }
+          }
+        } catch (fallbackError) {
+          if (fallbackError.name === 'AbortError') return;
+          console.warn('Impossible d’élargir le fil à tout le Cameroun.', fallbackError);
+        }
+      }
+      const cacheKey = `feed.${feedCity}.${state.categoryId || 'all'}.${state.search || 'all'}.${state.page}`;
       if (state.page === 1) writeCache(cacheKey, result);
       const posts = result.posts;
       posts.forEach((post) => state.postsById.set(String(post.id), post));
@@ -530,6 +585,7 @@ import { icon } from './ui/icons.js';
           : renderFeedEmpty();
       }
       elements['load-more'].classList.toggle('hidden', !state.hasMore || posts.length === 0);
+      observeFeedCards();
     } catch (error) {
       if (requestId !== state.feedRequestId || error.name === 'AbortError') return;
       feedFailure = error.message || 'Impossible de joindre le serveur.';
@@ -542,6 +598,7 @@ import { icon } from './ui/icons.js';
         elements['feed-list'].innerHTML = posts.length
           ? posts.map(renderPost).join('')
           : emptyState('Aucune annonce enregistrée', 'Reconnectez-vous pour actualiser le fil.');
+        observeFeedCards();
         elements['load-more'].classList.add('hidden');
         return;
       }
@@ -596,7 +653,7 @@ import { icon } from './ui/icons.js';
     state.postsById.set(String(post.id), post);
     const isFavorite = state.favorites.some((favorite) => String(favorite.id) === String(post.id));
     const sellerName = post.shop?.ownerName || post.shop?.name || 'Vendeur';
-    const sellerAvatar = post.shop?.ownerAvatarUrl || post.shop?.logoUrl;
+    const sellerAvatar = post.shop?.logoUrl || post.shop?.ownerAvatarUrl;
     const avatar = sellerAvatar
       ? `<img src="${escapeAttribute(sellerAvatar)}" alt="" loading="lazy">`
       : `<span>${escapeHtml(initials(sellerName))}</span>`;
@@ -604,36 +661,53 @@ import { icon } from './ui/icons.js';
     const content = media.length
       ? media.map(renderMedia).join('')
       : `<div class="media-placeholder"><span>Image à venir</span></div>`;
+    const backdropUrl = media[0]?.posterUrl || (media[0]?.type === 'image' ? media[0]?.url : '');
+    const backdrop = backdropUrl
+      ? `<img class="post-backdrop" src="${escapeAttribute(absoluteUrl(backdropUrl))}" alt="" aria-hidden="true" loading="eager">`
+      : '';
     const saleActive = Boolean(post.flash_sale_active);
     const price = saleActive ? post.current_price_fcfa : post.price_fcfa;
     const mediaType = media.length > 1 ? `<span class="media-count">${media.length} photos · glisser</span>` : '';
-    const location = [post.neighborhood, post.city].filter(Boolean).map(escapeHtml).join(' · ');
-    const shopPath = post.shop?.slug
-      ? `<a class="shop-link" href="#" data-action="shop" data-slug="${escapeAttribute(post.shop.slug)}">Voir la boutique ${icon('arrowUpRight')}</a>`
-      : '';
+    const neighborhood = [post.neighborhood, post.district, post.area, post.shop?.neighborhood]
+      .find((value) => typeof value === 'string' && value.trim());
+    const city = [post.city, post.shop?.city]
+      .find((value) => typeof value === 'string' && value.trim());
+    const location = [neighborhood, city].filter(Boolean).map((value) => escapeHtml(value.trim())).join(' · ');
+    const sellerProfile = post.shop?.slug
+      ? `<a class="rail-profile" href="#" data-action="shop" data-slug="${escapeAttribute(post.shop.slug)}" aria-label="Ouvrir le profil de ${escapeAttribute(sellerName)}">${avatar}</a>`
+      : `<span class="rail-profile" aria-label="Profil de ${escapeAttribute(sellerName)}">${avatar}</span>`;
+    const playerControls = media.some((item) => item.type === 'video') ? `
+      <div class="video-progress-rail">
+        <input class="video-seekbar" type="range" min="0" max="1000" value="0" step="1" data-seekbar disabled aria-label="Avancer ou reculer dans la vidéo">
+      </div>
+      <div class="video-controls is-hidden" data-video-controls>
+        <div class="video-controls-top">
+          <span class="video-time"><span data-current-time>00:00</span> / <span data-duration>00:00</span></span>
+        </div>
+      </div>` : '';
 
     return `
       <article class="post-card" data-post-id="${post.id}">
-        <div class="post-media ${media.length > 1 ? 'has-gallery' : ''}">${content}${mediaType}</div>
+        <div class="post-media ${media.length > 1 ? 'has-gallery' : ''}">${backdrop}${content}${mediaType}${playerControls}${playerControls ? `<div class="media-play-feedback" aria-hidden="true">${icon('play')}</div>` : ''}</div>
+        <aside class="feed-action-rail" aria-label="Actions sur l'annonce">
+          ${sellerProfile}
+          <button class="favorite-toggle rail-favorite ${isFavorite ? 'is-favorite' : ''}" type="button" data-favorite-id="${escapeAttribute(post.id)}" aria-label="${isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}" aria-pressed="${isFavorite}">${icon('heart')}<span>Favori</span></button>
+          <button class="rail-action" type="button" data-contact="whatsapp" data-post-id="${escapeAttribute(post.id)}" aria-label="Contacter sur WhatsApp">${icon('message')}<span>WhatsApp</span></button>
+          ${post.shop?.slug ? `<a class="rail-action rail-shop" href="#" data-action="shop" data-slug="${escapeAttribute(post.shop.slug)}" aria-label="Voir les annonces de ${escapeAttribute(sellerName)}">${icon('store')}<span>Boutique</span></a>` : ''}
+          ${media.some((item) => item.type === 'video') ? `<button class="rail-action rail-audio" type="button" data-audio-toggle aria-label="Activer le son" aria-pressed="false">${icon('volumeOff')}<span>Son coupé</span></button>` : ''}
+        </aside>
         <div class="post-body">
           <div class="post-kicker">
             <span class="category-label">${escapeHtml(post.category || 'Annonce')}</span>
             ${saleActive ? '<span class="flash-label">VENTE FLASH</span>' : ''}
             <button class="favorite-toggle ${isFavorite ? 'is-favorite' : ''}" type="button" data-favorite-id="${escapeAttribute(post.id)}" aria-label="${isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}" aria-pressed="${isFavorite}">${icon('heart')}</button>
           </div>
+          ${location ? `<p class="post-location">${location}</p>` : ''}
           <h2 class="post-title">${escapeHtml(post.title)}</h2>
           ${post.description ? `<p class="post-description">${escapeHtml(post.description)}</p>` : ''}
           <div class="price-row">
             <strong>${escapeHtml(formatPriceLabel(price, post.price_unit))}</strong>
             ${saleActive ? `<del>${escapeHtml(formatPriceLabel(post.price_fcfa, post.price_unit))}</del>` : ''}
-          </div>
-          <div class="seller-row">
-            <div class="seller-avatar">${avatar}</div>
-            <div class="seller-info">
-              <strong>${escapeHtml(sellerName)}</strong>
-              <span>${location || 'Vendeur local'}</span>
-            </div>
-            ${shopPath}
           </div>
           <div class="contact-actions">
             <button class="button button-primary contact-button" type="button" data-contact="whatsapp" data-post-id="${post.id}">
@@ -651,11 +725,180 @@ import { icon } from './ui/icons.js';
     const url = absoluteUrl(media.url);
     const poster = media.posterUrl ? ` poster="${escapeAttribute(absoluteUrl(media.posterUrl))}"` : '';
     if (media.type === 'video') {
-      return `<video class="post-video" controls playsinline preload="none"${poster} data-hls-url="${escapeAttribute(url)}">
+      return `<video class="post-video" playsinline muted preload="none"${poster} data-hls-url="${escapeAttribute(url)}">
         Votre lecteur ne prend pas en charge les vidéos HLS.
       </video>`;
     }
     return `<img class="post-image" src="${escapeAttribute(url)}" alt="Photo de l’annonce" loading="lazy">`;
+  }
+
+  function observeFeedCards() {
+    if (!state.feedObserver) return;
+    elements['feed-list'].querySelectorAll('.post-card').forEach((card) => state.feedObserver.observe(card));
+  }
+
+  function handleFeedVisibility(entries) {
+    if (state.activePage !== 'feed' || !document.body.classList.contains('immersive-feed')) return;
+    entries.forEach((entry) => {
+      const video = entry.target.querySelector('video.post-video');
+      if (entry.intersectionRatio >= 0.6) {
+        if (video && state.activeVideo !== video) {
+          video.muted = state.videoMuted;
+          video.defaultMuted = state.videoMuted;
+          if (state.videoMuted) video.setAttribute('muted', '');
+          else video.removeAttribute('muted');
+          const audioButton = entry.target.querySelector('[data-audio-toggle]');
+          if (audioButton) {
+            audioButton.setAttribute('aria-label', state.videoMuted ? 'Activer le son' : 'Couper le son');
+            audioButton.setAttribute('aria-pressed', String(!state.videoMuted));
+            audioButton.innerHTML = `${icon(state.videoMuted ? 'volumeOff' : 'volume')}<span>${state.videoMuted ? 'Son coupé' : 'Son activé'}</span>`;
+          }
+          handleVideoClick({ target: video });
+        }
+      } else if (video && state.activeVideo === video) {
+        disposeActiveVideo();
+        hideVideoControls(entry.target);
+      }
+      const cards = elements['feed-list'].querySelectorAll('.post-card');
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.2
+        && cards[cards.length - 1] === entry.target && state.hasMore) loadMore();
+    });
+  }
+
+  function showVideoControls(card) {
+    const controls = card?.querySelector('[data-video-controls]');
+    if (!controls) return;
+    document.querySelectorAll('[data-video-controls]').forEach((item) => item.classList.add('is-hidden'));
+    controls.classList.remove('is-hidden');
+    window.clearTimeout(state.controlsTimer);
+    state.controlsTimer = window.setTimeout(() => controls.classList.add('is-hidden'), 2700);
+  }
+
+  function hideVideoControls(card) {
+    card?.querySelector('[data-video-controls]')?.classList.add('is-hidden');
+  }
+
+  function showPlaybackFeedback(video, playing) {
+    const feedback = video.closest('.post-card')?.querySelector('.media-play-feedback');
+    if (!feedback) return;
+    feedback.innerHTML = icon(playing ? 'pause' : 'play');
+    feedback.classList.remove('is-visible');
+    void feedback.offsetWidth;
+    feedback.classList.add('is-visible');
+    window.setTimeout(() => feedback.classList.remove('is-visible'), 650);
+  }
+
+  function formatPlaybackTime(seconds) {
+    if (!Number.isFinite(seconds) || seconds < 0) return '00:00';
+    const total = Math.floor(seconds);
+    const minutes = Math.floor(total / 60);
+    const remainder = total % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`;
+  }
+
+  function updateVideoProgress(event) {
+    const video = event.target.closest?.('video.post-video');
+    if (!video) return;
+    const card = video.closest('.post-card');
+    const seekbar = card?.querySelector('[data-seekbar]');
+    const timeline = getVideoTimeline(video);
+    const duration = timeline ? timeline.end - timeline.start : 0;
+    const currentTime = timeline ? Math.max(0, Math.min(duration, video.currentTime - timeline.start)) : video.currentTime;
+    if (seekbar && event.type !== 'input' && !seekbar.dataset.scrubbing) {
+      seekbar.value = duration ? String(Math.round((currentTime / duration) * 1000)) : '0';
+      seekbar.disabled = !timeline;
+    } else if (seekbar && timeline) {
+      seekbar.disabled = false;
+    }
+    const current = card?.querySelector('[data-current-time]');
+    const total = card?.querySelector('[data-duration]');
+    if (current) current.textContent = formatPlaybackTime(currentTime);
+    if (total) total.textContent = formatPlaybackTime(duration);
+  }
+
+  function getVideoTimeline(video) {
+    if (Number.isFinite(video.duration) && video.duration > 0) {
+      return { start: 0, end: video.duration };
+    }
+    try {
+      if (video.seekable?.length) {
+        const last = video.seekable.length - 1;
+        const start = video.seekable.start(last);
+        const end = video.seekable.end(last);
+        if (Number.isFinite(start) && Number.isFinite(end) && end > start) return { start, end };
+      }
+    } catch { /* Le navigateur peut invalider la fenêtre seekable pendant le chargement. */ }
+    const hlsDuration = Number(video.dataset.hlsDuration);
+    if (Number.isFinite(hlsDuration) && hlsDuration > 0) return { start: 0, end: hlsDuration };
+    return null;
+  }
+
+  function updateVideoLayout(event) {
+    const video = event.target.closest?.('video.post-video');
+    if (!video || !video.videoWidth || !video.videoHeight) return;
+    const media = video.closest('.post-media');
+    if (!media) return;
+    const bounds = media.getBoundingClientRect();
+    if (!bounds.width || !bounds.height) return;
+    const scale = Math.min(bounds.width / video.videoWidth, bounds.height / video.videoHeight);
+    const displayedHeight = video.videoHeight * scale;
+    const bottomGap = Math.max(0, (bounds.height - displayedHeight) / 2);
+    media.style.setProperty('--video-letterbox-bottom', `${bottomGap}px`);
+  }
+
+  function updateAllVideoLayouts() {
+    elements['feed-list']?.querySelectorAll('video.post-video').forEach((video) => {
+      updateVideoLayout({ target: video });
+    });
+  }
+
+  function handleSeekInput(event) {
+    const seekbar = event.target.closest('[data-seekbar]');
+    if (!seekbar) return;
+    const card = seekbar.closest('.post-card');
+    const video = card?.querySelector('video.post-video');
+    const timeline = video && getVideoTimeline(video);
+    if (!video || !timeline) return;
+    const duration = timeline.end - timeline.start;
+    try {
+      video.currentTime = timeline.start + (Number(seekbar.value) / Number(seekbar.max)) * duration;
+    } catch (error) {
+      console.warn('Impossible de déplacer la lecture vidéo.', error);
+      return;
+    }
+    showVideoControls(card);
+    updateVideoProgress({ target: video, type: 'input' });
+    if (event.type === 'change' || event.type === 'pointerup' || event.type === 'pointercancel') {
+      delete seekbar.dataset.scrubbing;
+    }
+  }
+
+  function handleControlsActivity(event) {
+    const card = event.target.closest?.('.post-card');
+    if (!card) return;
+    const seekbar = event.target.closest('[data-seekbar]');
+    if (seekbar && ['pointerdown', 'pointermove', 'pointerup', 'pointercancel'].includes(event.type)) {
+      if (event.type === 'pointerdown') {
+        seekbar.dataset.scrubbing = 'true';
+        try { seekbar.setPointerCapture(event.pointerId); } catch { /* Capture is optional on older webviews. */ }
+      }
+      if (event.type === 'pointerdown' || (event.type === 'pointermove' && seekbar.dataset.scrubbing)) {
+        const bounds = seekbar.getBoundingClientRect();
+        if (bounds.width > 0) {
+          const progress = Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width));
+          seekbar.value = String(Math.round(progress * Number(seekbar.max)));
+          handleSeekInput({ target: seekbar, type: 'input' });
+        }
+      }
+      if (event.type === 'pointerup' || event.type === 'pointercancel') {
+        handleSeekInput({ target: seekbar, type: event.type });
+      }
+    }
+    if (event.type === 'pointerdown'
+      || (event.type === 'pointermove' && seekbar)
+      || (event.type === 'pointerup' && seekbar)) {
+      showVideoControls(card);
+    }
   }
 
   /**
@@ -670,10 +913,27 @@ import { icon } from './ui/icons.js';
    */
   function handleVideoClick(event) {
     const video = event.target.closest('video.post-video');
-    if (!video || video.dataset.sourceReady) return;
+    if (!video) return;
+    const card = video.closest('.post-card');
+    if (event.type === 'click') showVideoControls(card);
+    if (video.dataset.sourceReady) {
+      if (event.type === 'click' && document.body.classList.contains('immersive-feed')
+        && state.activeVideo === video) {
+        if (video.paused) {
+          video.play().catch(() => {});
+          showPlaybackFeedback(video, true);
+        } else {
+          video.pause();
+          showPlaybackFeedback(video, false);
+        }
+      }
+      return;
+    }
 
     const source = video.dataset.hlsUrl;
     if (!source) return;
+
+    if (event.type === 'click') showPlaybackFeedback(video, true);
 
     // Ferme la vidéo précédente pour éviter les lectures multiples simultanées
     disposeActiveVideo();
@@ -693,6 +953,14 @@ import { icon } from './ui/icons.js';
       video.hlsPlayer = player;
       player.loadSource(source);
       player.attachMedia(video);
+      player.on(window.Hls.Events.LEVEL_LOADED, (eventName, data) => {
+        const duration = Number(data?.details?.totalduration);
+        if (Number.isFinite(duration) && duration > 0) {
+          video.dataset.hlsDuration = String(duration);
+          updateVideoProgress({ target: video, type: 'durationchange' });
+        }
+        updateVideoLayout({ target: video });
+      });
       player.on(window.Hls.Events.MANIFEST_PARSED, () => {
         video.play().catch((error) => console.warn('La lecture vidéo a été interrompue.', error));
       });
@@ -786,9 +1054,44 @@ import { icon } from './ui/icons.js';
       return;
     }
 
+    const shopContact = event.target.closest('[data-shop-contact]');
+    if (shopContact) {
+      contactShop(shopContact);
+      return;
+    }
+
+    const audioToggle = event.target.closest('[data-audio-toggle]');
+    if (audioToggle) {
+      const video = audioToggle.closest('.post-card')?.querySelector('video.post-video');
+      if (video) {
+        const shouldMute = !video.muted;
+        video.muted = shouldMute;
+        video.defaultMuted = shouldMute;
+        if (shouldMute) video.setAttribute('muted', '');
+        else video.removeAttribute('muted');
+        video.volume = 1;
+        state.videoMuted = shouldMute;
+        audioToggle.setAttribute('aria-label', video.muted ? 'Activer le son' : 'Couper le son');
+        audioToggle.setAttribute('aria-pressed', String(!video.muted));
+        audioToggle.innerHTML = `${icon(video.muted ? 'volumeOff' : 'volume')}<span>${video.muted ? 'Son coupé' : 'Son activé'}</span>`;
+        showVideoControls(audioToggle.closest('.post-card'));
+        if (!video.muted) {
+          video.play().catch((error) => {
+            console.warn('Impossible d’activer le son de la vidéo.', error);
+            showToast('Touchez à nouveau le bouton du son pour autoriser la lecture audio.');
+          });
+        }
+      }
+      return;
+    }
+
     const action = event.target.closest('[data-action]');
     if (!action) return;
     event.preventDefault();
+    if (action.dataset.action === 'replay-onboarding') {
+      replayOnboarding();
+      return;
+    }
     if (action.dataset.action === 'home') navigate('/feed');
     if (action.dataset.action === 'explore-cameroon') {
       state.feedNationwide = true;
@@ -817,6 +1120,10 @@ import { icon } from './ui/icons.js';
 
   function showPage(page) {
     state.activePage = page;
+    if (page === 'feed') setSearchVisibility(false, false);
+    if (page !== 'feed' && page !== 'explore') disposeActiveVideo();
+    document.body.classList.toggle('immersive-feed', page === 'feed');
+    document.body.classList.toggle('shop-page', page === 'shop');
     const showingFeed = page === 'feed' || page === 'explore';
     elements['feed-page'].classList.toggle('hidden', !showingFeed);
     elements['account-page'].classList.toggle('hidden', page !== 'account');
@@ -835,6 +1142,14 @@ import { icon } from './ui/icons.js';
       window.setTimeout(() => elements['search-input'].focus(), 0);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function setSearchVisibility(visible, focus = true) {
+    elements['search-form'].classList.toggle('hidden', !visible);
+    elements['immersive-search-toggle'].setAttribute('aria-expanded', String(visible));
+    elements['search-input'].value = state.search;
+    if (visible && focus) window.setTimeout(() => elements['search-input'].focus(), 0);
+    if (!visible) elements['search-input'].blur();
   }
 
   function toggleFavorite(postId) {
@@ -893,6 +1208,26 @@ import { icon } from './ui/icons.js';
     } catch (error) {
       showToast(error.message);
     }
+  }
+
+  function contactShop(button) {
+    const channel = button.dataset.shopContact;
+    const phone = button.dataset.phone || '';
+    const digits = phone.replace(/\D/g, '');
+    if (digits) {
+      if (channel === 'call') {
+        openExternalUrl(`tel:${phone.replace(/[^\d+]/g, '')}`);
+      } else {
+        const message = encodeURIComponent('Bonjour, je souhaite contacter votre boutique sur ViteVendre.');
+        openExternalUrl(`https://wa.me/${digits}?text=${message}`);
+      }
+      return;
+    }
+    if (button.dataset.postId) {
+      contactSeller(button.dataset.postId, channel);
+      return;
+    }
+    showToast('Cette boutique n’a pas encore renseigné de numéro de contact.');
   }
 
   function openExternalUrl(url) {
@@ -992,10 +1327,10 @@ import { icon } from './ui/icons.js';
     document.documentElement.dataset.theme = state.theme;
     document.querySelector('meta[name="theme-color"]')?.setAttribute(
       'content',
-      state.theme === 'dark' ? '#161a17' : '#f3eee6'
+      state.theme === 'dark' ? '#000000' : '#f3eee6'
     );
     if (window.StatusBar && window.cordova?.platformId === 'android') {
-      window.StatusBar.backgroundColorByHexString(state.theme === 'dark' ? '#161a17' : '#f3eee6');
+      window.StatusBar.backgroundColorByHexString(state.theme === 'dark' ? '#000000' : '#f3eee6');
       if (state.theme === 'dark' && window.StatusBar.styleLightContent) window.StatusBar.styleLightContent();
       else window.StatusBar.styleDefault();
     }
@@ -1025,6 +1360,7 @@ import { icon } from './ui/icons.js';
           <h2>Les meilleures affaires sont locales.</h2>
           <p>Connectez-vous pour contacter les vendeurs ou créer votre boutique.</p>
           <button class="button button-primary full-width" type="button" data-action="login">Connexion / inscription</button>
+          <button class="onboarding-replay" type="button" data-action="replay-onboarding">Revoir la présentation</button>
         </div>`;
       return;
     }
@@ -1049,6 +1385,7 @@ import { icon } from './ui/icons.js';
           <p class="eyebrow">PERSONNALISATION</p>
           <h2 id="appearance-title">Mode sombre</h2>
           <p class="muted" id="theme-description">Adapter l’apparence de l’application.</p>
+          <button class="onboarding-replay" type="button" data-action="replay-onboarding">Revoir la présentation</button>
         </div>
         <button class="theme-switch" type="button" data-action="toggle-theme" aria-pressed="${state.theme === 'dark'}" aria-label="${state.theme === 'dark' ? 'Activer le mode clair' : 'Activer le mode sombre'}">
           <span class="theme-switch-track"><span class="theme-switch-thumb"></span></span>
@@ -1118,13 +1455,19 @@ import { icon } from './ui/icons.js';
       elements['account-page'].classList.add('hidden');
       elements['favorites-page'].classList.add('hidden');
       state.activePage = 'shop';
+      document.body.classList.remove('immersive-feed');
+      document.body.classList.add('shop-page');
       elements['feed-list'].innerHTML = `
         <div class="shop-hero">
-          <button class="button button-quiet back-button" type="button" data-action="home">${icon('arrowLeft')} Retour au fil</button>
+          <button class="button button-quiet back-button" type="button" data-action="home" aria-label="Retour au fil">${icon('arrowLeft')} Retour au fil</button>
           <p class="eyebrow">BOUTIQUE LOCALE</p>
           <h2>${escapeHtml(shop.name)}</h2>
-          <p class="muted">${escapeHtml(shop.description || '')}</p>
           <p class="shop-location">${escapeHtml(shop.city || '')}</p>
+          <div class="shop-contact-actions" aria-label="Contacter la boutique">
+            <button class="shop-contact-button shop-contact-whatsapp" type="button" data-shop-contact="whatsapp" data-phone="${escapeAttribute(shop.whatsapp || '')}" data-post-id="${escapeAttribute(posts[0]?.id || '')}">${icon('whatsapp')} WhatsApp</button>
+            <button class="shop-contact-button shop-contact-call" type="button" data-shop-contact="call" data-phone="${escapeAttribute(shop.whatsapp || '')}" data-post-id="${escapeAttribute(posts[0]?.id || '')}">${icon('phone')} Appeler</button>
+          </div>
+          <p class="muted">${escapeHtml(shop.description || '')}</p>
         </div>
         ${posts.length ? posts.map(renderShopPost).join('') : emptyState('La boutique prépare ses offres', 'Revenez bientôt découvrir les prochaines annonces.')}`;
       elements['load-more'].classList.add('hidden');

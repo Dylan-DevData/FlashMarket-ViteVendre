@@ -111,6 +111,11 @@ async function getUploadStatus(req, res, next) {
   }
 }
 
+/**
+ * Reçoit un morceau binaire individuel (ex: 1 Mo) envoyé par le téléphone via PUT.
+ * Stocke le morceau temporairement sous la forme `uploads/chunks/<uploadId>/<index>.part`.
+ * Enregistre le numéro du morceau reçu en base de données pour permettre la reprise.
+ */
 async function receiveChunk(req, res, next) {
   try {
     const uploadId = parseUploadId(req.params.id);
@@ -131,8 +136,11 @@ async function receiveChunk(req, res, next) {
       throw httpError(400, `Taille incorrecte pour ce morceau : ${expectedLength} octets attendus.`);
     }
 
+    // 1. Accès ou création du dossier temporaire pour cette session d'envoi
     const directory = chunkDirectory(uploadId);
     await fs.mkdir(directory, { recursive: true });
+
+    // 2. Écriture atomique du morceau binaire sur le disque
     const target = path.join(directory, `${chunkIndex}.part`);
     const temporary = path.join(directory, `${chunkIndex}.${crypto.randomUUID()}.tmp`);
     await fs.writeFile(temporary, req.body, { flag: 'wx' });
@@ -148,6 +156,7 @@ async function receiveChunk(req, res, next) {
       });
     }
 
+    // 3. Marque ce morceau comme reçu en base PostgreSQL
     const receivedChunks = await mediaModel.markChunkReceived(
       { id: uploadId, userId: req.user.id },
       chunkIndex
@@ -158,6 +167,13 @@ async function receiveChunk(req, res, next) {
   }
 }
 
+/**
+ * Finalise l'upload une fois tous les morceaux reçus :
+ * 1. Concatène tous les fichiers .part dans l'ordre pour recréer le MP4 original.
+ * 2. Vérifie la taille et l'empreinte de sécurité SHA-256.
+ * 3. Envoie la vidéo dans la file de transcodage FFmpeg.
+ * 4. Supprime le dossier temporaire uploads/chunks/<uploadId>/ pour libérer le disque.
+ */
 async function completeChunkUpload(req, res, next) {
   const uploadId = parseUploadId(req.params.id);
   if (activeCompletions.has(uploadId)) {
@@ -191,6 +207,7 @@ async function completeChunkUpload(req, res, next) {
     assembledPath = path.join(uploadDir, `${crypto.randomUUID()}.assembling`);
     const output = await fs.open(assembledPath, 'w');
     try {
+      // Concaténation séquentielle de chaque morceau dans le fichier assemblé
       for (let index = 0; index < upload.total_chunks; index += 1) {
         const part = await fs.readFile(path.join(directory, `${index}.part`));
         let written = 0;
@@ -203,6 +220,7 @@ async function completeChunkUpload(req, res, next) {
       await output.close();
     }
 
+    // Contrôle d'intégrité : vérification de la taille et de la signature du fichier
     const stat = await fs.stat(assembledPath);
     if (Number(stat.size) !== Number(upload.total_size)) {
       throw httpError(422, 'La taille finale du fichier ne correspond pas à celle annoncée.');
@@ -215,13 +233,18 @@ async function completeChunkUpload(req, res, next) {
       throw httpError(422, 'Le SHA-256 reçu ne correspond pas. Recommencez un nouvel envoi.');
     }
 
+    // Fichier validé : renommage vers son nom définitif
     await fs.rename(assembledPath, finalPath);
     assembledPath = null;
     const completed = await mediaModel.completeChunkUpload(uploadId, req.user.id, sha256);
     if (!completed) throw httpError(404, 'Session d’envoi introuvable.');
+
+    // Envoi dans la file de transcodage FFmpeg
     mediaQueue.enqueue(upload.media_id);
+
+    // NETTOYAGE : suppression immédiate du dossier temporaire uploads/chunks/<uploadId>/
     await fs.rm(directory, { recursive: true, force: true }).catch((cleanupError) => {
-    logger.error('upload_chunks_cleanup_failed', { uploadId, message: cleanupError.message });
+      logger.error('upload_chunks_cleanup_failed', { uploadId, message: cleanupError.message });
     });
     return res.status(202).json({
       uploadId,
@@ -274,6 +297,10 @@ function parseUploadId(value) {
   return value;
 }
 
+/**
+ * Retourne le chemin du dossier temporaire où sont stockés les morceaux d'une vidéo :
+ * Exemple : `backend/uploads/chunks/<uploadId>/`
+ */
 function chunkDirectory(uploadId) {
   return path.join(uploadDir, 'chunks', uploadId);
 }
