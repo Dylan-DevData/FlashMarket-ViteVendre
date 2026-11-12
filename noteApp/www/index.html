@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f3eee6">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: gap:; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' blob: http: https:; connect-src 'self' http: https:; worker-src 'self' blob:; font-src 'self' data:">
+    <title>ViteVendre — Le commerce près de vous</title>
+    <link rel="stylesheet" href="css/tokens.css">
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="app-shell">
+        <header class="topbar">
+            <a class="brand" href="#" data-action="home" aria-label="ViteVendre, accueil">
+                <img class="brand-mark" src="img/vitevendre-mark.svg" alt="">
+                <span>Vite<span class="brand-accent">Vendre</span></span>
+            </a>
+            <button class="city-button" id="city-button" type="button" aria-label="Choisir la ville">
+                <svg class="city-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+                <span id="current-city">Choisir une ville</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
+            </button>
+            <button class="avatar-button" id="account-button" type="button" aria-label="Mon compte">
+                <span id="account-avatar">?</span>
+            </button>
+        </header>
+
+        <div class="network-status hidden" id="network-status" role="status" aria-live="polite">
+            Hors connexion — contenu enregistré
+        </div>
+
+        <main>
+            <section class="feed-page" id="feed-page">
+                <div class="feed-heading">
+                    <div>
+                        <p class="eyebrow">LE BON PLAN EST TOUT PRÈS</p>
+                        <h1>Découvrir <span class="heading-dot">.</span></h1>
+                    </div>
+                    <button class="icon-button search-toggle" id="search-toggle" type="button" aria-label="Rechercher">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
+                    </button>
+                </div>
+                <form class="search-bar hidden" id="search-form">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
+                    <input id="search-input" type="search" placeholder="Produit, logement, quartier..." maxlength="100">
+                    <button type="submit">Rechercher</button>
+                </form>
+
+                <nav class="category-strip" id="category-strip" aria-label="Catégories"></nav>
+
+                <section class="feed-list" id="feed-list" aria-live="polite">
+                    <div class="loading-card">
+                        <span class="loader"></span>
+                        <p>On cherche les bonnes affaires autour de vous...</p>
+                    </div>
+                </section>
+                <div class="feed-footer">
+                    <button class="button button-outline" id="load-more" type="button">Voir plus d’annonces</button>
+                    <p class="muted small">Des offres locales, directement des vendeurs.</p>
+                </div>
+            </section>
+
+            <section class="account-page hidden" id="account-page">
+                <div class="section-heading" id="account-heading">
+                    <p class="eyebrow">VOTRE ESPACE</p>
+                    <h1>Mon compte<span class="heading-dot">.</span></h1>
+                </div>
+                <div id="account-content"></div>
+            </section>
+
+            <section class="favorites-page hidden" id="favorites-page" aria-labelledby="favorites-title">
+                <div class="section-heading">
+                    <p class="eyebrow">VOS ANNONCES ENREGISTRÉES</p>
+                    <h1 id="favorites-title">Favoris<span class="heading-dot">.</span></h1>
+                </div>
+                <div id="favorites-list" aria-live="polite"></div>
+            </section>
+        </main>
+
+        <nav class="bottom-nav" aria-label="Navigation principale">
+            <button class="nav-item active" type="button" data-action="home" aria-label="Accueil">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Accueil</span>
+            </button>
+            <button class="nav-item" type="button" data-action="explore" aria-label="Explorer">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg><span>Explorer</span>
+            </button>
+            <button class="nav-item nav-create" type="button" data-action="publish" aria-label="Publier une annonce">
+                <span class="publish-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
+            </button>
+            <button class="nav-item" type="button" data-action="favorites" aria-label="Favoris">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 8.7c0 4.2-8.8 10-8.8 10s-8.8-5.8-8.8-10a4.7 4.7 0 0 1 8.8-2.2 4.7 4.7 0 0 1 8.8 2.2Z"/></svg><span>Favoris</span>
+            </button>
+            <button class="nav-item" type="button" data-action="account" aria-label="Mon compte">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-1.5a7 7 0 0 1 14 0V21z"/></svg><span>Compte</span>
+            </button>
+        </nav>
+    </div>
+
+    <div class="app-splash" id="app-splash" role="status" aria-label="ViteVendre">
+        <img src="img/vitevendre-mark.svg" alt="">
+        <strong>Vite<span>Vendre</span></strong>
+        <p>Le commerce près de chez vous</p>
+    </div>
+
+    <dialog class="onboarding-dialog" id="onboarding-dialog" aria-label="Bienvenue sur ViteVendre">
+        <div class="onboarding-top">
+            <div class="brand onboarding-brand" aria-label="ViteVendre">
+                <img class="brand-mark" src="img/vitevendre-mark.svg" alt="">
+                <span>Vite<span class="brand-accent">Vendre</span></span>
+            </div>
+            <button class="onboarding-skip" type="button" data-onboarding-action="finish">Passer</button>
+        </div>
+        <div class="onboarding-track" id="onboarding-track" aria-label="Présentation de ViteVendre">
+            <section class="onboarding-slide" data-slide="0" aria-roledescription="diapositive" aria-label="1 sur 4">
+                <div class="onboarding-art art-discover" aria-hidden="true">
+                    <svg viewBox="0 0 300 260" role="presentation">
+                        <rect x="81" y="20" width="138" height="218" rx="28" fill="#183c2d"/><rect x="90" y="31" width="120" height="196" rx="20" fill="#f3eee6"/>
+                        <rect x="99" y="42" width="102" height="136" rx="14" fill="#b9d1b3"/><path d="m101 151 30-48 21 26 16-18 31 40v27h-98Z" fill="#759977"/>
+                        <circle cx="151" cy="105" r="21" fill="#fff" fill-opacity=".85"/><path d="m147 96 14 9-14 9Z" fill="#1f4d3a"/>
+                        <rect x="108" y="188" width="82" height="8" rx="4" fill="#d5ddcf"/><rect x="108" y="203" width="54" height="8" rx="4" fill="#d5ddcf"/>
+                        <g class="art-float"><rect x="22" y="72" width="83" height="34" rx="17" fill="#a3e635"/><text x="63" y="94" text-anchor="middle" fill="#183c2d" font-size="12" font-weight="700">25 000 FCFA</text></g>
+                        <g class="art-float art-float-delay"><circle cx="238" cy="166" r="24" fill="#fff"/><path d="M231 166h14m-7-7v14" stroke="#1f4d3a" stroke-width="3" stroke-linecap="round"/></g>
+                    </svg>
+                </div>
+                <div class="onboarding-copy"><p class="eyebrow">LE COMMERCE PREND VIE</p><h1>Voyez avant de vous déplacer</h1><p>Des vidéos et des photos de vrais produits et logements, à découvrir simplement.</p></div>
+            </section>
+            <section class="onboarding-slide" data-slide="1" aria-roledescription="diapositive" aria-label="2 sur 4">
+                <div class="onboarding-art art-neighborhood" aria-hidden="true">
+                    <svg viewBox="0 0 300 260" role="presentation">
+                        <circle cx="150" cy="132" r="94" fill="#fff" fill-opacity=".72"/><path d="M64 133c23-30 47-30 70-2s44 29 66 3 39-22 52-5v61H64Z" fill="#d6e5d3"/>
+                        <path d="M76 183v-48l28-22 28 22v48Zm96 0v-65l30-23 30 23v65Z" fill="#88a98b"/><path d="M91 183v-24h25v24m97 0v-28h18v28" fill="#f3eee6"/>
+                        <g class="art-pin"><path d="M150 55c-24 0-40 18-40 40 0 30 40 72 40 72s40-42 40-72c0-22-16-40-40-40Z" fill="#d9532b"/><circle cx="150" cy="94" r="14" fill="#fff"/></g>
+                        <circle class="art-ripple" cx="150" cy="96" r="54" fill="none" stroke="#a3e635" stroke-width="3"/>
+                    </svg>
+                </div>
+                <div class="onboarding-copy"><p class="eyebrow">À CÔTÉ DE CHEZ VOUS</p><h1>Les bons plans de votre quartier</h1><p>Bafoussam, Yaoundé, Douala et plus : les annonces proches passent en premier.</p></div>
+            </section>
+            <section class="onboarding-slide" data-slide="2" aria-roledescription="diapositive" aria-label="3 sur 4">
+                <div class="onboarding-art art-contact" aria-hidden="true">
+                    <svg viewBox="0 0 300 260" role="presentation">
+                        <circle cx="150" cy="130" r="93" fill="#fff" fill-opacity=".72"/>
+                        <path d="M104 83c7-8 17-11 24-4l16 18c5 6 4 14-1 20l-8 9c10 19 23 32 42 42l9-8c6-5 14-6 20-1l18 16c7 7 4 17-4 24-12 12-29 12-47 4-41-17-76-52-93-93-8-18-8-35 4-47Z" fill="#1f4d3a"/>
+                        <path d="M175 66h61a12 12 0 0 1 12 12v37a12 12 0 0 1-12 12h-23l-18 16v-16h-20a12 12 0 0 1-12-12V78a12 12 0 0 1 12-12Z" fill="#a3e635"/>
+                        <path d="M184 91h39m-39 14h25" stroke="#183c2d" stroke-width="4" stroke-linecap="round"/>
+                        <circle cx="221" cy="182" r="24" fill="#d9532b"/><path d="m211 182 7 7 14-16" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div class="onboarding-copy"><p class="eyebrow">DIRECTEMENT AVEC LE VENDEUR</p><h1>Un appel, un message, c’est réglé</h1><p>Contactez la boutique par téléphone ou WhatsApp quand une annonce vous intéresse.</p></div>
+            </section>
+            <section class="onboarding-slide" data-slide="3" aria-roledescription="diapositive" aria-label="4 sur 4">
+                <div class="onboarding-art art-seller" aria-hidden="true">
+                    <svg viewBox="0 0 300 260" role="presentation">
+                        <circle cx="150" cy="135" r="99" fill="#fff" fill-opacity=".72"/><path d="M66 110h168l-17-36H83Z" fill="#d9532b"/>
+                        <path d="M72 110v96h156v-96" fill="#f3eee6" stroke="#1f4d3a" stroke-width="4"/>
+                        <path d="M67 110h166v18a18 18 0 0 1-18-18 18 18 0 0 1-18 18 18 18 0 0 1-18-18 18 18 0 0 1-18 18 18 18 0 0 1-18-18 18 18 0 0 1-18 18 18 18 0 0 1-18-18 18 18 0 0 1-18 18Z" fill="#a3e635"/>
+                        <path d="M91 172h116v34H91Z" fill="#d6e5d3"/><circle cx="123" cy="167" r="18" fill="#e8793c"/><circle cx="149" cy="164" r="20" fill="#6f9b57"/><circle cx="177" cy="169" r="17" fill="#cf4c37"/>
+                        <path class="art-send" d="m232 70 15-24 15 24h-10v20h-10V70Z" fill="#1f4d3a"/><path d="M120 144 150 98l30 46" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div class="onboarding-copy"><p class="eyebrow">À VOUS DE JOUER</p><h1>Vous vendez ? Publiez en quelques étapes</h1><p>Présentez vos produits ou logements à des acheteurs autour de vous.</p></div>
+            </section>
+        </div>
+        <div class="onboarding-footer">
+            <div class="onboarding-pagination" role="group" aria-label="Progression">
+                <button class="onboarding-dot is-active" type="button" aria-label="Diapositive 1" aria-current="step" data-onboarding-index="0"></button>
+                <button class="onboarding-dot" type="button" aria-label="Diapositive 2" data-onboarding-index="1"></button>
+                <button class="onboarding-dot" type="button" aria-label="Diapositive 3" data-onboarding-index="2"></button>
+                <button class="onboarding-dot" type="button" aria-label="Diapositive 4" data-onboarding-index="3"></button>
+            </div>
+            <button class="button button-onboarding" id="onboarding-next" type="button" data-onboarding-action="next">Suivant</button>
+        </div>
+    </dialog>
+
+    <dialog class="app-dialog" id="city-dialog">
+        <form method="dialog" class="dialog-close-row">
+            <button class="dialog-close" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        </form>
+        <p class="eyebrow">VOTRE LOCALITÉ</p>
+        <h2>Autour de quelle ville ?</h2>
+        <p class="muted">On commence près de vous. Vous pourrez explorer d’autres villes à tout moment.</p>
+        <label class="field-label" for="city-select">Choisir une ville</label>
+        <select id="city-select"></select>
+        <p class="form-message" id="city-load-status" role="status" aria-live="polite"></p>
+        <button class="text-button hidden" id="retry-cities" type="button">Réessayer</button>
+        <button class="button button-primary full-width" id="save-city" type="button">Voir les annonces</button>
+    </dialog>
+
+    <dialog class="app-dialog" id="auth-dialog">
+        <form method="dialog" class="dialog-close-row">
+            <button class="dialog-close" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        </form>
+        <p class="eyebrow">BIENVENUE CHEZ VOUS</p>
+        <h2 id="auth-title">Connectez-vous</h2>
+        <p class="muted" id="auth-description">Pour contacter un vendeur, connectez-vous à ViteVendre.</p>
+        <div class="auth-tabs" role="tablist">
+            <button class="auth-tab active" type="button" data-auth-mode="login">Connexion</button>
+            <button class="auth-tab" type="button" data-auth-mode="register">Créer un compte</button>
+        </div>
+        <form id="auth-form">
+            <label class="field-label" for="auth-phone">Téléphone</label>
+            <input id="auth-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+237 6XX XXX XXX" required>
+            <label class="field-label" for="auth-password">Mot de passe</label>
+            <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="8" required>
+            <div class="register-fields hidden" id="register-fields">
+                <label class="field-label" for="auth-name">Votre nom</label>
+                <input id="auth-name" name="fullName" type="text" autocomplete="name" minlength="2" maxlength="80">
+                <label class="field-label" for="auth-city">Votre ville</label>
+                <select id="auth-city" name="cityId"></select>
+            </div>
+            <button class="button button-primary full-width" id="auth-submit" type="submit">Se connecter</button>
+            <p class="form-message" id="auth-message" role="status"></p>
+        </form>
+        <p class="tiny muted">vos  données restent privées. Ne partagez jamais votre mot de passe.</p>
+    </dialog>
+
+    <dialog class="app-dialog wide-dialog" id="publish-dialog">
+        <form method="dialog" class="dialog-close-row">
+            <button class="dialog-close" aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        </form>
+        <p class="eyebrow">FAITES DÉCOUVRIR VOTRE OFFRE</p>
+        <h2>Nouvelle annonce<span class="heading-dot">.</span></h2>
+        <p class="muted">Ajoutez des photos ou une vidéo.</p>
+        <div id="publish-content"></div>
+    </dialog>
+
+    <div class="toast-region" id="toast-region" role="status" aria-live="polite"></div>
+
+    <script src="cordova.js"></script>
+    <script src="lib/hls.min.js"></script>
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

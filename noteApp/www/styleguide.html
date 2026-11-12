@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#f3eee6">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:">
+    <title>ViteVendre — Guide visuel</title>
+    <link rel="stylesheet" href="css/tokens.css">
+    <link rel="stylesheet" href="css/base.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <main class="styleguide-page">
+        <header class="styleguide-header">
+            <div>
+                <p class="eyebrow">VITE VENDRE · DESIGN SYSTEM</p>
+                <h1>Guide visuel<span class="heading-dot">.</span></h1>
+            </div>
+            <button class="button button-outline" id="theme-toggle" type="button" aria-pressed="false">Thème sombre</button>
+        </header>
+        <p>Couleurs, composants et tailles tactiles du frontend mobile.</p>
+
+        <section class="styleguide-card">
+            <p class="styleguide-city">BAFOUSSAM · OUEST</p>
+            <h2>Les bons produits, près de vous</h2>
+            <p>Le fil reste lisible et les actions principales sont faciles à atteindre au toucher.</p>
+            <div class="styleguide-row">
+                <button class="styleguide-action" type="button">Action douce</button>
+                <button class="button button-primary" type="button">Continuer</button>
+                <span class="styleguide-price">70 000 FCFA / mois</span>
+            </div>
+        </section>
+
+        <section>
+            <h2>Palette</h2>
+            <div class="styleguide-swatches">
+                <div class="styleguide-swatch paper">Fond · #F3EEE6</div>
+                <div class="styleguide-swatch green">Vert · #1F4D3A</div>
+                <div class="styleguide-swatch lime">Citron · #A3E635</div>
+                <div class="styleguide-swatch orange">Ville · #D9532B</div>
+            </div>
+        </section>
+
+        <section class="styleguide-card">
+            <p class="eyebrow">COMPOSANTS</p>
+            <div class="styleguide-row">
+                <button class="category-chip selected" type="button">Tout voir</button>
+                <button class="category-chip" type="button">Logements</button>
+                <button class="category-chip" type="button">Vivres frais</button>
+            </div>
+            <p>Les polices sont système et les cibles de boutons mesurent au moins 44 px.</p>
+        </section>
+
+        <section>
+            <h2>Navigation mobile</h2>
+            <nav class="styleguide-nav" aria-label="Aperçu de la barre d’onglets">
+                <span class="styleguide-nav-item is-active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m3 10 9-7 9 7v10h-6v-6H9v6H3z"/></svg>Accueil</span>
+                <span class="styleguide-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>Explorer</span>
+                <span class="styleguide-nav-create"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
+                <span class="styleguide-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20.8 8.7c0 4.2-8.8 10-8.8 10s-8.8-5.8-8.8-10a4.7 4.7 0 0 1 8.8-2.2 4.7 4.7 0 0 1 8.8 2.2Z"/></svg>Favoris</span>
+                <span class="styleguide-nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 21v-1.5a7 7 0 0 1 14 0V21z"/></svg>Compte</span>
+            </nav>
+        </section>
+    </main>
+    <script type="module" src="js/styleguide.js"></script>
+</body>
+</html>

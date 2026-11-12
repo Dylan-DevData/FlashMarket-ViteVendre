@@ -1,0 +1,42 @@
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="com.carnet.noteApp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0" xmlns:android="http://schemas.android.com/apk/res/android">
+    <name>ViteVendre</name>
+    <description>Découvrez le commerce local en vidéos courtes.</description>
+    <author email="support@flashmarket.cm">ViteVendre</author>
+    <content src="index.html" />
+    <icon src="www/img/vitevendre-icon.png" />
+    <!-- Scheme 'http' : évite le blocage 'Mixed Content' d'Android qui interdit d'appeler une API HTTP depuis une page HTTPS -->
+    <preference name="scheme" value="http" />
+    <preference name="hostname" value="localhost" />
+    <preference name="android-minSdkVersion" value="24" />
+    <preference name="Orientation" value="portrait" />
+    <!-- MixedContentMode 0 = ALWAYS_ALLOW : autorise le chargement de contenus mixtes en dev -->
+    <preference name="MixedContentMode" value="0" />
+
+    <!-- Whitelist réseau Cordova : autorise le WebView à envoyer des requêtes fetch/xhr vers l'API -->
+    <access origin="*" />
+    <allow-navigation href="http://*/*" />
+    <allow-navigation href="https://*/*" />
+    <allow-navigation href="data:*" />
+
+    <!-- Autorise l'ouverture des liens externes et des appels téléphoniques -->
+    <allow-intent href="http://*/*" />
+    <allow-intent href="https://*/*" />
+    <allow-intent href="tel:*" />
+    <platform name="android">
+        <icon density="ldpi" src="resources/android/vitevendre-ldpi.png" />
+        <icon density="mdpi" src="resources/android/vitevendre-mdpi.png" />
+        <icon density="hdpi" src="resources/android/vitevendre-hdpi.png" />
+        <icon density="xhdpi" src="resources/android/vitevendre-xhdpi.png" />
+        <icon density="xxhdpi" src="resources/android/vitevendre-xxhdpi.png" />
+        <icon density="xxxhdpi" src="resources/android/vitevendre-xxxhdpi.png" />
+
+        <!-- Fichier de sécurité réseau Android autorisant le trafic HTTP local (cleartext) -->
+        <resource-file src="resources/android/network_security_config.xml" target="app/src/main/res/xml/network_security_config.xml" />
+
+        <!-- Injection dans AndroidManifest.xml pour autoriser le trafic HTTP (non chiffré) vers le backend local -->
+        <edit-config file="app/src/main/AndroidManifest.xml" mode="merge" target="/manifest/application">
+            <application android:usesCleartextTraffic="true" android:networkSecurityConfig="@xml/network_security_config" />
+        </edit-config>
+    </platform>
+</widget>

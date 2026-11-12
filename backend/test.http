@@ -1,0 +1,88 @@
+@baseUrl = http://localhost:3000
+@cityId = 1
+
+### Santé API + connexion PostgreSQL
+# @name health
+GET {{baseUrl}}/api/health
+Accept: application/json
+
+> {% client.test("API et PostgreSQL répondent", function () {
+  client.assert(response.status === 200, "Statut attendu : 200");
+  client.assert(response.body.db === "ok", "La base doit répondre");
+}); %}
+
+### Villes disponibles (Bafoussam = id 1 avec le seed actuel)
+# @name cities
+GET {{baseUrl}}/api/cities
+Accept: application/json
+
+> {% client.test("La liste des villes répond", function () {
+  client.assert(response.status === 200, "Statut attendu : 200");
+  client.assert(response.body.cities.length > 0, "Au moins une ville est attendue");
+}); %}
+
+### Catégories actives
+# @name categories
+GET {{baseUrl}}/api/categories
+Accept: application/json
+
+> {% client.test("La liste des catégories répond", function () {
+  client.assert(response.status === 200, "Statut attendu : 200");
+  client.assert(response.body.categories.length > 0, "Au moins une catégorie est attendue");
+}); %}
+
+### Feed public de Bafoussam
+# @name feed
+GET {{baseUrl}}/api/posts?city_id={{cityId}}&page=1&limit=10
+Accept: application/json
+
+> {% client.test("Le feed local est accessible sans connexion", function () {
+  client.assert(response.status === 200, "Statut attendu : 200");
+  client.assert(response.body.cityId === Number(request.variables.get("cityId")), "La ville doit correspondre");
+}); %}
+
+### Sans ville ni connexion, le feed demande une localité (400 attendu)
+GET {{baseUrl}}/api/posts
+Accept: application/json
+
+> {% client.test("Une localité est requise pour un visiteur anonyme", function () {
+  client.assert(response.status === 400, "Statut attendu : 400");
+}); %}
+
+### Publier sans JWT est interdit (401 attendu)
+POST {{baseUrl}}/api/posts
+Accept: application/json
+Content-Type: application/json
+
+{}
+
+> {% client.test("La publication exige une authentification", function () {
+  client.assert(response.status === 401, "Statut attendu : 401");
+}); %}
+
+### Créer une session vidéo sans JWT est interdit (401 attendu)
+POST {{baseUrl}}/api/media/uploads
+Accept: application/json
+Content-Type: application/json
+
+{}
+
+> {% client.test("L'upload exige une authentification", function () {
+  client.assert(response.status === 401, "Statut attendu : 401");
+}); %}
+
+### Connexion (remplace les valeurs par un compte déjà inscrit)
+# @name login
+POST {{baseUrl}}/api/auth/login
+Accept: application/json
+Content-Type: application/json
+
+{
+  "phone": "+237699123456",
+  "password": "REMPLACER_PAR_LE_MOT_DE_PASSE"
+}
+
+> {% client.test("La connexion retourne un JWT", function () {
+  client.assert(response.status === 200, "Statut attendu : 200");
+  client.assert(typeof response.body.token === "string", "Un JWT est attendu");
+}); %}

@@ -1,0 +1,28 @@
+# Dépendances Node.js
+**/node_modules/
+package-lock.json
+
+# Fichiers d'environnement et secrets
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Fichiers médias et uploads
+backend/uploads/
+backend/media/
+
+# Fichiers générés Cordova (très lourds, regénérés via cordova prepare)
+noteApp/platforms/
+noteApp/plugins/
+
+# Logs et temporaires
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# Fichiers OS / Editeur
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
