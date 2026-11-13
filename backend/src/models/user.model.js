@@ -1,5 +1,6 @@
 const { query } = require('../config/db');
 
+// Accès SQL aux comptes : seules les fonctions nécessaires à l'authentification sont exposées.
 async function findByPhone(phone) {
   const { rows } = await query(
     `SELECT id, phone, password_hash, full_name, city_id, role, status

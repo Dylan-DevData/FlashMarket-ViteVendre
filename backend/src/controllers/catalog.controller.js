@@ -1,5 +1,6 @@
 const catalogModel = require('../models/catalog.model');
 
+// Expose les listes de référence utilisées par les formulaires et filtres du frontend.
 async function getCities(req, res, next) {
   try {
     return res.json({ cities: await catalogModel.listCities() });

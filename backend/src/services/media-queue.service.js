@@ -13,6 +13,7 @@ const queued = new Set();
 let active = false;
 
 function enqueue(mediaId) {
+  // Garde les traitements en arrière-plan et évite de mettre deux fois le même média en file.
   const id = Number(mediaId);
   if (!Number.isSafeInteger(id) || id < 1 || queued.has(id)) return;
   queued.add(id);

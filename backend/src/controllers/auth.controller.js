@@ -4,6 +4,7 @@ const { createToken } = require('../services/token.service');
 const { httpError } = require('../utils/httpError');
 const { isValidPhone, parseOptionalId } = require('../utils/validation');
 
+// Crée un compte après validation des champs et renvoie un profil public accompagné d'un JWT.
 async function register(req, res, next) {
   try {
     const body = req.body && typeof req.body === 'object' ? req.body : {};
@@ -43,6 +44,7 @@ async function register(req, res, next) {
 }
 
 async function login(req, res, next) {
+  // Vérifie le téléphone et le mot de passe sans révéler lequel des deux est incorrect.
   try {
     const body = req.body && typeof req.body === 'object' ? req.body : {};
     const phone = typeof body.phone === 'string' ? body.phone.trim() : '';
@@ -65,6 +67,7 @@ async function login(req, res, next) {
 }
 
 function publicUser(user) {
+  // Filtre les colonnes privées avant d'inclure l'utilisateur dans la réponse HTTP.
   return {
     id: user.id,
     phone: user.phone,

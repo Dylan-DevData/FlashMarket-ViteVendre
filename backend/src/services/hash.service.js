@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const sharp = require('sharp');
 
+// SHA-256 détecte les fichiers identiques; pHash repère les images visuellement proches.
 async function sha256File(filePath) {
   return new Promise((resolve, reject) => {
     const hash = crypto.createHash('sha256');

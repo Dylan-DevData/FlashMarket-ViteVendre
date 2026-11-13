@@ -10,6 +10,7 @@ if (missing.length > 0) {
 }
 
 function positiveIntegerEnv(name, fallback) {
+  // Les tailles maximales et durées doivent être des entiers strictement positifs.
   const raw = process.env[name];
   if (raw === undefined || raw === '') return fallback;
   const value = Number(raw);

@@ -5,6 +5,7 @@ const { uploadPostMedia } = require('../middlewares/upload.middleware');
 
 const router = express.Router();
 
+// Le feed est public; publier une annonce et contacter un vendeur exigent une session.
 router.get('/', optionalAuthenticate, postController.getFeed);
 router.post('/', authenticate, uploadPostMedia, postController.create);
 router.get('/:id', optionalAuthenticate, postController.getPost);

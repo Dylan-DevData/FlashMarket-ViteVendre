@@ -1,3 +1,4 @@
+// Centralise les journaux JSON pour faciliter leur lecture et leur collecte en production.
 function write(level, message, details = {}) {
   const record = {
     timestamp: new Date().toISOString(),

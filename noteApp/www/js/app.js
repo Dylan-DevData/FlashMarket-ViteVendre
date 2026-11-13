@@ -49,7 +49,7 @@ import { icon } from './ui/icons.js';
     limit: 10,
     loading: false,
     hasMore: true,
-    feedNationwide: false,
+    feedNationwide: true,
     feedRequestId: 0,
     feedController: null,
     authMode: 'login',
@@ -65,6 +65,11 @@ import { icon } from './ui/icons.js';
     apiReachable: null,
     stopRouter: null,
     unsubscribeNetwork: null,
+    pullStartY: null,
+    pullDistance: 0,
+    pullRefreshing: false,
+    activeShop: null,
+    activeShopPosts: [],
   };
 
   const elements = {};
@@ -182,6 +187,7 @@ import { icon } from './ui/icons.js';
     attachEvents();
     state.pendingUpload = getPendingUpload();
     applyTheme(state.theme);
+    syncFeedTabs();
     startFirstRun();
     state.splashTimer = window.setTimeout(dismissSplash, 900);
     state.stopRouter = startRouter((route) => {
@@ -223,9 +229,10 @@ import { icon } from './ui/icons.js';
       'auth-description', 'auth-phone', 'auth-password', 'auth-name', 'auth-city',
       'register-fields', 'auth-submit', 'auth-message', 'publish-dialog',
       'publish-content', 'search-toggle', 'search-form', 'search-input',
-      'immersive-search-toggle', 'search-close', 'load-more',
+      'immersive-search-toggle', 'search-close', 'load-more', 'feed-tabs',
       'toast-region',
       'network-status',
+      'feed-refresh-indicator',
       'favorites-page', 'favorites-list', 'onboarding-dialog', 'onboarding-track',
       'onboarding-next', 'account-heading',
       'app-splash',
@@ -288,6 +295,10 @@ import { icon } from './ui/icons.js';
     elements['feed-list'].addEventListener('pointermove', handleControlsActivity);
     elements['feed-list'].addEventListener('pointerup', handleControlsActivity);
     elements['feed-list'].addEventListener('pointercancel', handleControlsActivity);
+    elements['feed-list'].addEventListener('touchstart', handlePullStart, { passive: true });
+    elements['feed-list'].addEventListener('touchmove', handlePullMove, { passive: false });
+    elements['feed-list'].addEventListener('touchend', handlePullEnd, { passive: true });
+    elements['feed-list'].addEventListener('touchcancel', resetPullRefresh, { passive: true });
     window.addEventListener('resize', updateAllVideoLayouts, { passive: true });
     elements['favorites-list']?.addEventListener('click', handleVideoClick, true);
     elements['favorites-list']?.addEventListener('play', handleVideoClick, true);
@@ -485,7 +496,6 @@ import { icon } from './ui/icons.js';
       return;
     }
     state.cityId = cityId;
-    state.feedNationwide = false;
     appStore.setState({ cityId });
     setStored(CITY_STORAGE_KEY, String(cityId));
     elements['auth-city'].value = String(cityId);
@@ -505,6 +515,64 @@ import { icon } from './ui/icons.js';
     state.feedObserver?.disconnect();
     elements['feed-list'].innerHTML = loadingState();
     await fetchFeed(false, state.feedRequestId, state.feedController);
+  }
+
+  function handlePullStart(event) {
+    if (state.activePage !== 'feed' || state.pullRefreshing || window.scrollY > 2
+      || event.target.closest('button, a, input, select, textarea, [data-seekbar]')) return;
+    const touch = event.touches?.[0];
+    if (!touch) return;
+    state.pullStartY = touch.clientY;
+    state.pullDistance = 0;
+  }
+
+  function handlePullMove(event) {
+    if (state.pullStartY === null || state.pullRefreshing) return;
+    const touch = event.touches?.[0];
+    if (!touch) return;
+    const distance = touch.clientY - state.pullStartY;
+    if (distance <= 0) {
+      resetPullRefresh();
+      return;
+    }
+    if (window.scrollY > 2) return resetPullRefresh();
+    state.pullDistance = Math.min(distance, 112);
+    if (state.pullDistance > 8) event.preventDefault();
+    const indicator = elements['feed-refresh-indicator'];
+    const label = indicator.querySelector('[data-refresh-label]');
+    indicator.classList.add('is-pulling');
+    indicator.style.setProperty('--pull-distance', `${Math.min(state.pullDistance * 0.72, 72)}px`);
+    label.textContent = state.pullDistance >= 76 ? 'Relâcher pour actualiser' : 'Tirer pour actualiser';
+  }
+
+  async function handlePullEnd() {
+    if (state.pullStartY === null) return;
+    const shouldRefresh = state.pullDistance >= 76;
+    state.pullStartY = null;
+    if (!shouldRefresh) return resetPullRefresh();
+    state.pullRefreshing = true;
+    const indicator = elements['feed-refresh-indicator'];
+    indicator.classList.remove('is-pulling');
+    indicator.classList.add('is-refreshing');
+    indicator.querySelector('[data-refresh-label]').textContent = 'Actualisation…';
+    indicator.style.setProperty('--pull-distance', '58px');
+    try {
+      await refreshFeed();
+    } finally {
+      state.pullRefreshing = false;
+      resetPullRefresh();
+    }
+  }
+
+  function resetPullRefresh() {
+    if (state.pullRefreshing) return;
+    state.pullStartY = null;
+    state.pullDistance = 0;
+    const indicator = elements['feed-refresh-indicator'];
+    if (!indicator) return;
+    indicator.classList.remove('is-pulling', 'is-refreshing');
+    indicator.style.removeProperty('--pull-distance');
+    indicator.querySelector('[data-refresh-label]').textContent = 'Tirer pour actualiser';
   }
 
   async function loadMore() {
@@ -560,6 +628,7 @@ import { icon } from './ui/icons.js';
           if (Array.isArray(fallbackResult?.posts)) {
             result = fallbackResult;
             state.feedNationwide = true;
+            syncFeedTabs();
             feedCity = 'all';
             if (result.posts.length) {
               const cityName = state.cities.find((city) => Number(city.id) === Number(state.cityId))?.name;
@@ -678,13 +747,10 @@ import { icon } from './ui/icons.js';
       : `<span class="rail-profile" aria-label="Profil de ${escapeAttribute(sellerName)}">${avatar}</span>`;
     const playerControls = media.some((item) => item.type === 'video') ? `
       <div class="video-progress-rail">
+        <span class="video-time" aria-live="off"><span data-current-time>00:00</span> / <span data-duration>--:--</span></span>
         <input class="video-seekbar" type="range" min="0" max="1000" value="0" step="1" data-seekbar disabled aria-label="Avancer ou reculer dans la vidéo">
       </div>
-      <div class="video-controls is-hidden" data-video-controls>
-        <div class="video-controls-top">
-          <span class="video-time"><span data-current-time>00:00</span> / <span data-duration>00:00</span></span>
-        </div>
-      </div>` : '';
+      <div class="video-controls is-hidden" data-video-controls aria-hidden="true"></div>` : '';
 
     return `
       <article class="post-card" data-post-id="${post.id}">
@@ -738,7 +804,8 @@ import { icon } from './ui/icons.js';
   }
 
   function handleFeedVisibility(entries) {
-    if (state.activePage !== 'feed' || !document.body.classList.contains('immersive-feed')) return;
+    if (!['feed', 'shop-viewer'].includes(state.activePage)
+      || !document.body.classList.contains('immersive-feed')) return;
     entries.forEach((entry) => {
       const video = entry.target.querySelector('video.post-video');
       if (entry.intersectionRatio >= 0.6) {
@@ -760,7 +827,7 @@ import { icon } from './ui/icons.js';
         hideVideoControls(entry.target);
       }
       const cards = elements['feed-list'].querySelectorAll('.post-card');
-      if (entry.isIntersecting && entry.intersectionRatio >= 0.2
+      if (state.activePage === 'feed' && entry.isIntersecting && entry.intersectionRatio >= 0.2
         && cards[cards.length - 1] === entry.target && state.hasMore) loadMore();
     });
   }
@@ -813,7 +880,11 @@ import { icon } from './ui/icons.js';
     const current = card?.querySelector('[data-current-time]');
     const total = card?.querySelector('[data-duration]');
     if (current) current.textContent = formatPlaybackTime(currentTime);
-    if (total) total.textContent = formatPlaybackTime(duration);
+    if (total) total.textContent = timeline ? formatPlaybackTime(duration) : '--:--';
+    if (seekbar) {
+      const progress = duration ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0;
+      seekbar.style.setProperty('--seek-progress', `${progress}%`);
+    }
   }
 
   function getVideoTimeline(video) {
@@ -1040,6 +1111,22 @@ import { icon } from './ui/icons.js';
       return;
     }
 
+    const shopPost = event.target.closest('[data-shop-post-index]');
+    if (shopPost) {
+      openShopPostViewer(Number(shopPost.dataset.shopPostIndex));
+      return;
+    }
+
+    const feedScope = event.target.closest('[data-feed-scope]');
+    if (feedScope) {
+      const showAllCities = feedScope.dataset.feedScope === 'for-you';
+      if (state.feedNationwide === showAllCities) return;
+      state.feedNationwide = showAllCities;
+      syncFeedTabs();
+      refreshFeed();
+      return;
+    }
+
     const category = event.target.closest('[data-category]');
     if (category) {
       state.categoryId = category.dataset.category ? Number(category.dataset.category) : null;
@@ -1093,8 +1180,13 @@ import { icon } from './ui/icons.js';
       return;
     }
     if (action.dataset.action === 'home') navigate('/feed');
+    if (action.dataset.action === 'shop-profile-back') {
+      showShopProfile();
+      return;
+    }
     if (action.dataset.action === 'explore-cameroon') {
       state.feedNationwide = true;
+      syncFeedTabs();
       refreshFeed();
     }
     if (action.dataset.action === 'retry-feed') refreshFeed();
@@ -1119,11 +1211,13 @@ import { icon } from './ui/icons.js';
   }
 
   function showPage(page) {
+    const returningFromShop = page === 'feed' && Boolean(state.activeShop);
     state.activePage = page;
     if (page === 'feed') setSearchVisibility(false, false);
     if (page !== 'feed' && page !== 'explore') disposeActiveVideo();
     document.body.classList.toggle('immersive-feed', page === 'feed');
     document.body.classList.toggle('shop-page', page === 'shop');
+    document.body.classList.toggle('shop-viewer', page === 'shop-viewer');
     const showingFeed = page === 'feed' || page === 'explore';
     elements['feed-page'].classList.toggle('hidden', !showingFeed);
     elements['account-page'].classList.toggle('hidden', page !== 'account');
@@ -1142,6 +1236,19 @@ import { icon } from './ui/icons.js';
       window.setTimeout(() => elements['search-input'].focus(), 0);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (returningFromShop) {
+      state.activeShop = null;
+      state.activeShopPosts = [];
+      refreshFeed();
+    }
+  }
+
+  function syncFeedTabs() {
+    elements['feed-tabs']?.querySelectorAll('[data-feed-scope]').forEach((button) => {
+      const active = (button.dataset.feedScope === 'for-you') === state.feedNationwide;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-pressed', String(active));
+    });
   }
 
   function setSearchVisibility(visible, focus = true) {
@@ -1449,27 +1556,36 @@ import { icon } from './ui/icons.js';
     try {
       const result = await api(`/api/shops/${encodeURIComponent(slug)}`);
       const shop = result.shop;
-      const posts = shop.posts || [];
+      const posts = (shop.posts || []).map((post) => ({
+        ...post,
+        price_fcfa: post.priceFcfa ?? post.price_fcfa,
+        current_price_fcfa: post.currentPriceFcfa ?? post.current_price_fcfa,
+        price_unit: post.priceUnit ?? post.price_unit,
+        flash_sale_active: Number(post.currentPriceFcfa) < Number(post.priceFcfa),
+        shop: {
+          id: shop.id,
+          name: shop.name,
+          slug: shop.slug,
+          logoUrl: shop.logoUrl,
+          ownerName: shop.ownerName,
+          ownerAvatarUrl: shop.ownerAvatarUrl,
+          city: shop.city,
+          neighborhood: post.neighborhood,
+          whatsapp: shop.whatsapp,
+        },
+        city: shop.city,
+      }));
       disposeActiveVideo();
+      state.feedObserver?.disconnect();
+      state.activeShop = shop;
+      state.activeShopPosts = posts;
       elements['feed-page'].classList.remove('hidden');
       elements['account-page'].classList.add('hidden');
       elements['favorites-page'].classList.add('hidden');
       state.activePage = 'shop';
       document.body.classList.remove('immersive-feed');
       document.body.classList.add('shop-page');
-      elements['feed-list'].innerHTML = `
-        <div class="shop-hero">
-          <button class="button button-quiet back-button" type="button" data-action="home" aria-label="Retour au fil">${icon('arrowLeft')} Retour au fil</button>
-          <p class="eyebrow">BOUTIQUE LOCALE</p>
-          <h2>${escapeHtml(shop.name)}</h2>
-          <p class="shop-location">${escapeHtml(shop.city || '')}</p>
-          <div class="shop-contact-actions" aria-label="Contacter la boutique">
-            <button class="shop-contact-button shop-contact-whatsapp" type="button" data-shop-contact="whatsapp" data-phone="${escapeAttribute(shop.whatsapp || '')}" data-post-id="${escapeAttribute(posts[0]?.id || '')}">${icon('whatsapp')} WhatsApp</button>
-            <button class="shop-contact-button shop-contact-call" type="button" data-shop-contact="call" data-phone="${escapeAttribute(shop.whatsapp || '')}" data-post-id="${escapeAttribute(posts[0]?.id || '')}">${icon('phone')} Appeler</button>
-          </div>
-          <p class="muted">${escapeHtml(shop.description || '')}</p>
-        </div>
-        ${posts.length ? posts.map(renderShopPost).join('') : emptyState('La boutique prépare ses offres', 'Revenez bientôt découvrir les prochaines annonces.')}`;
+      renderShopProfile();
       elements['load-more'].classList.add('hidden');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) {
@@ -1477,16 +1593,77 @@ import { icon } from './ui/icons.js';
     }
   }
 
+  function renderShopProfile() {
+    const shop = state.activeShop;
+    const posts = state.activeShopPosts;
+    if (!shop) return;
+    const avatarUrl = shop.logoUrl || shop.ownerAvatarUrl;
+    const avatar = avatarUrl
+      ? `<img src="${escapeAttribute(absoluteUrl(avatarUrl))}" alt="" loading="lazy">`
+      : `<span>${escapeHtml(initials(shop.name))}</span>`;
+    elements['feed-list'].innerHTML = `
+      <section class="shop-profile mx-auto w-full max-w-3xl px-0 sm:px-4" aria-label="Profil de la boutique ${escapeAttribute(shop.name)}">
+        <button class="shop-profile-back" type="button" data-action="home" aria-label="Retour au fil">${icon('arrowLeft')}</button>
+        <div class="shop-profile-header flex flex-col items-center text-center">
+          <div class="shop-profile-avatar grid place-items-center overflow-hidden rounded-full">${avatar}</div>
+          <h1 class="text-2xl font-extrabold tracking-tight">${escapeHtml(shop.name)}</h1>
+          <p class="shop-profile-handle">@${escapeHtml(shop.slug)}</p>
+          <p class="shop-location">${escapeHtml(shop.city || '')}</p>
+          <div class="shop-profile-stats"><strong>${posts.length}</strong><span>Publication${posts.length === 1 ? '' : 's'}</span></div>
+          ${shop.description ? `<p class="shop-profile-description">${escapeHtml(shop.description)}</p>` : ''}
+          <div class="shop-contact-actions" aria-label="Contacter la boutique">
+            <button class="shop-contact-button shop-contact-whatsapp" type="button" data-shop-contact="whatsapp" data-phone="${escapeAttribute(shop.whatsapp || '')}" data-post-id="${escapeAttribute(posts[0]?.id || '')}">${icon('whatsapp')} WhatsApp</button>
+            <button class="shop-contact-button shop-contact-call" type="button" data-shop-contact="call" data-phone="${escapeAttribute(shop.whatsapp || '')}" data-post-id="${escapeAttribute(posts[0]?.id || '')}">${icon('phone')} Appeler</button>
+          </div>
+        </div>
+        <div class="shop-posts-heading"><span>${icon('grid')} Publications</span></div>
+        ${posts.length
+          ? `<div class="shop-post-grid grid grid-cols-3 gap-px sm:grid-cols-4">${posts.map(renderShopPost).join('')}</div>`
+          : emptyState('La boutique prépare ses offres', 'Revenez bientôt découvrir les prochaines annonces.')}
+      </section>`;
+  }
+
+  function openShopPostViewer(index) {
+    if (!Number.isInteger(index) || index < 0 || index >= state.activeShopPosts.length) return;
+    disposeActiveVideo();
+    state.feedObserver?.disconnect();
+    state.activeShopPosts.forEach((post) => state.postsById.set(String(post.id), post));
+    state.activePage = 'shop-viewer';
+    document.body.classList.remove('shop-page');
+    document.body.classList.add('immersive-feed');
+    document.body.classList.add('shop-viewer');
+    elements['feed-list'].innerHTML = `
+      <button class="shop-viewer-back" type="button" data-action="shop-profile-back" aria-label="Retour au profil de la boutique">${icon('arrowLeft')}</button>
+      ${state.activeShopPosts.map(renderPost).join('')}`;
+    observeFeedCards();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    window.requestAnimationFrame(() => {
+      elements['feed-list'].querySelectorAll('.post-card')[index]?.scrollIntoView({ block: 'start' });
+    });
+  }
+
+  function showShopProfile() {
+    disposeActiveVideo();
+    state.feedObserver?.disconnect();
+    state.activePage = 'shop';
+    document.body.classList.remove('immersive-feed');
+    document.body.classList.remove('shop-viewer');
+    document.body.classList.add('shop-page');
+    renderShopProfile();
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
+
   function renderShopPost(post) {
     const media = post.media || [];
-    return `<article class="shop-listing">
-      ${media[0] ? renderMedia(media[0]) : ''}
-      <div><p class="eyebrow">ANNONCE</p><h3>${escapeHtml(post.title)}</h3>
-      <strong>${escapeHtml(formatPriceLabel(
-        post.current_price_fcfa ?? post.price_fcfa ?? post.currentPriceFcfa ?? post.priceFcfa,
-        post.price_unit || post.priceUnit
-      ))}</strong></div>
-    </article>`;
+    const thumbnail = media[0]?.posterUrl || (media[0]?.type === 'image' ? media[0]?.url : '');
+    const thumbnailContent = thumbnail
+      ? `<img src="${escapeAttribute(absoluteUrl(thumbnail))}" alt="${escapeAttribute(post.title)}" loading="lazy">`
+      : `<span class="shop-post-placeholder">${escapeHtml(post.title)}</span>`;
+    return `<button class="shop-post-tile" type="button" data-shop-post-index="${state.activeShopPosts.indexOf(post)}" aria-label="Voir la publication : ${escapeAttribute(post.title)}">
+      ${thumbnailContent}
+      ${media.some((item) => item.type === 'video') ? `<span class="shop-post-play" aria-hidden="true">${icon('play')}</span>` : ''}
+      <span class="shop-post-caption"><strong>${escapeHtml(post.title)}</strong><small>${escapeHtml(formatPriceLabel(post.current_price_fcfa ?? post.price_fcfa, post.price_unit))}</small></span>
+    </button>`;
   }
 
   function openPublish() {

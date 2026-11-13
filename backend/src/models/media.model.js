@@ -1,6 +1,7 @@
 const { pool, query, withTransaction } = require('../config/db');
 const postModel = require('./post.model');
 
+// Centralise les requêtes de médias et les changements d'état de leurs sessions d'envoi.
 async function findDuplicateSha256(sha256) {
   const { rows } = await query(
     `SELECT id FROM media
@@ -53,6 +54,7 @@ async function markChunkReceived(upload, chunkIndex) {
 }
 
 async function completeChunkUpload(uploadId, userId, sha256) {
+  // La transaction empêche de finaliser une session si un bloc est encore absent.
   return withTransaction(async (client) => {
     const upload = await findUpload(uploadId, userId, true, client);
     if (!upload) return null;
@@ -155,6 +157,7 @@ async function getForProcessing(mediaId) {
 }
 
 async function acquireProcessingLock(mediaId) {
+  // Le verrou consultatif PostgreSQL évite deux transcodages simultanés du même média.
   const client = await pool.connect();
   try {
     const { rows } = await client.query(
@@ -179,6 +182,7 @@ async function acquireProcessingLock(mediaId) {
 }
 
 async function completeAndMaybePublish(mediaId, result) {
+  // Passe le média à prêt, puis publie l'annonce uniquement lorsque tous ses médias le sont.
   return withTransaction(async (client) => {
     const updated = await client.query(
       `UPDATE media

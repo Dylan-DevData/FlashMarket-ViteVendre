@@ -3,6 +3,7 @@ const path = require('path');
 const sharp = require('sharp');
 const { mediaDir, maxImageBytes } = require('../config/env');
 
+// Valide, redimensionne et optimise une image avant de la rendre disponible dans le feed.
 async function processImage(sourcePath, mediaId) {
   const metadata = await sharp(sourcePath, { limitInputPixels: 40_000_000 }).metadata();
   if (!['jpeg', 'png', 'webp'].includes(metadata.format)) {

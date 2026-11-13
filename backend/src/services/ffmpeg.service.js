@@ -10,6 +10,7 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 ffmpeg.setFfprobePath(ffprobePath);
 
 async function assertAvailable() {
+  // Confirme que les exécutables configurés sont accessibles avant de traiter les uploads.
   try {
     await execFileAsync(ffmpegPath, ['-version'], { windowsHide: true });
     await execFileAsync(ffprobePath, ['-version'], { windowsHide: true });
@@ -22,6 +23,7 @@ async function assertAvailable() {
 }
 
 function probe(filePath) {
+  // Lit la durée, les dimensions et les codecs sans modifier la vidéo source.
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(filePath, (error, metadata) => {
       if (error) return reject(error);
@@ -120,6 +122,7 @@ async function extractPoster(inputPath, posterPath) {
 }
 
 async function processVideo(inputPath, mediaId) {
+  // Génère le HLS adaptatif, le MP4 de secours et l'affiche de la publication.
   const stat = await fs.stat(inputPath);
   if (maxVideoBytes > 0 && stat.size > maxVideoBytes) {
     const error = new Error('La vidéo dépasse la taille maximale autorisée.');

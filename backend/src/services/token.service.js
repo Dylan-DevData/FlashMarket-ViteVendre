@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { jwtSecret } = require('../config/env');
 
+// Signe un jeton de session contenant l'identifiant utilisateur et sa date d'expiration.
 function createToken(user) {
   return jwt.sign(
     { role: user.role },

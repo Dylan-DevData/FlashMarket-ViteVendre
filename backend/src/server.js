@@ -3,6 +3,7 @@ const { port, requestTimeoutMs, headersTimeoutMs } = require('./config/env');
 const { pool } = require('./config/db');
 const mediaQueue = require('./services/media-queue.service');
 
+// Démarre l'API puis reprend les médias interrompus lors d'un arrêt précédent.
 const server = app.listen(port, '0.0.0.0', () => {
   console.log(`API FlashMarket en écoute sur http://0.0.0.0:${port}`);
   mediaQueue.recoverPending().catch((error) => {

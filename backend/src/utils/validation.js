@@ -1,5 +1,6 @@
 const PHONE_PATTERN = /^\+?[0-9]{8,15}$/;
 
+// Validation partagée afin que les contrôleurs appliquent les mêmes règles métier.
 function isValidPhone(phone) {
   return typeof phone === 'string' && PHONE_PATTERN.test(phone.trim());
 }

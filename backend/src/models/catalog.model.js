@@ -1,5 +1,6 @@
 const { query } = require('../config/db');
 
+// Requêtes de lecture des villes et catégories actives, partagées par les contrôleurs.
 async function listCities() {
   const { rows } = await query(
     `SELECT id, name, region

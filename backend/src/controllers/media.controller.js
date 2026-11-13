@@ -23,6 +23,7 @@ const VIDEO_EXTENSIONS = {
 };
 const activeCompletions = new Set();
 
+// Renvoie une URL seulement si le média est prêt et si le demandeur a accès à l'annonce.
 async function getMedia(req, res, next) {
   try {
     const mediaId = Number(req.params.id);
@@ -48,6 +49,7 @@ async function getMedia(req, res, next) {
 }
 
 async function createChunkUpload(req, res, next) {
+  // Ouvre une session d'envoi et enregistre le nombre et la taille des blocs attendus.
   try {
     const body = req.body || {};
     const mimeType = body.mime_type;
@@ -95,6 +97,7 @@ async function createChunkUpload(req, res, next) {
 }
 
 async function getUploadStatus(req, res, next) {
+  // Permet au navigateur de reprendre l'envoi en ne renvoyant que les blocs manquants.
   try {
     const uploadId = parseUploadId(req.params.id);
     const upload = await mediaModel.findUpload(uploadId, req.user.id);
@@ -117,6 +120,7 @@ async function getUploadStatus(req, res, next) {
  * Enregistre le numéro du morceau reçu en base de données pour permettre la reprise.
  */
 async function receiveChunk(req, res, next) {
+  // Vérifie et écrit un bloc à la fois pour éviter de charger la vidéo entière en mémoire.
   try {
     const uploadId = parseUploadId(req.params.id);
     const upload = await mediaModel.findUpload(uploadId, req.user.id);
@@ -175,6 +179,7 @@ async function receiveChunk(req, res, next) {
  * 4. Supprime le dossier temporaire uploads/chunks/<uploadId>/ pour libérer le disque.
  */
 async function completeChunkUpload(req, res, next) {
+  // Assemble les blocs dans l'ordre, vérifie l'empreinte puis démarre le traitement média.
   const uploadId = parseUploadId(req.params.id);
   if (activeCompletions.has(uploadId)) {
     return next(httpError(409, 'L’assemblage de cette vidéo est déjà en cours.'));
@@ -281,6 +286,7 @@ async function completeChunkUpload(req, res, next) {
 }
 
 async function abortChunkUpload(req, res, next) {
+  // Annule une session du propriétaire et supprime les blocs encore temporaires.
   try {
     const uploadId = parseUploadId(req.params.id);
     const upload = await mediaModel.abortChunkUpload(uploadId, req.user.id);

@@ -4,6 +4,7 @@ const userModel = require('../models/user.model');
 const { httpError } = require('../utils/httpError');
 
 async function authenticateRequest(req, allowAnonymous) {
+  // Vérifie le JWT, puis relit le compte en base pour appliquer son statut actuel.
   const authorization = req.get('authorization') || '';
   const match = authorization.match(/^Bearer\s+(.+)$/i);
   if (!match) {

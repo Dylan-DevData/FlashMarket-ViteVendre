@@ -83,12 +83,14 @@ const upload = multer({
   },
 });
 
+// Nettoie les fichiers temporaires lorsque la validation ou l'enregistrement échoue.
 function removeTemporaryFiles(files) {
   return Promise.all((files || []).map((file) => fs.promises.unlink(file.path).catch((error) => {
     if (error.code !== 'ENOENT') console.error('[upload] nettoyage impossible :', error.message);
   })));
 }
 
+// Stocke les fichiers sur disque temporaire plutôt que de garder leur contenu en mémoire.
 function uploadPostMedia(req, res, next) {
   upload.array('media', 8)(req, res, async (error) => {
     if (!error) return next();

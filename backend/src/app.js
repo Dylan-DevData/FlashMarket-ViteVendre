@@ -8,6 +8,8 @@ const { query } = require('./config/db');
 const { notFound, errorHandler } = require('./middlewares/errorHandler');
 
 const app = express();
+
+// Configure Express sans ouvrir de port; server.js se charge du démarrage réseau.
 fs.mkdirSync(mediaDir, { recursive: true });
 
 // Sécurité Helmet : autorise les ressources cross-origin (images/vidéos lues par le frontend)
@@ -25,6 +27,7 @@ app.use(express.json({ limit: '1mb' }));
 
 // Middleware de contrôle d'accès : vérifie en base que l'annonce associée est bien publiée
 app.use('/media', async (req, res, next) => {
+  // Les fichiers liés à une annonce ne sont servis qu'après publication et traitement réussi.
   const match = req.path.match(/^\/(images|videos)\/([1-9]\d*)\//);
   if (!match) return res.status(404).json({ error: 'Média introuvable.' });
   try {
@@ -78,12 +81,14 @@ app.get('/api/health', async (req, res, next) => {
 });
 
 app.use('/api/auth', require('./routes/auth.routes'));
+// Chaque route est regroupée par domaine pour séparer HTTP, logique métier et SQL.
 app.use('/api', require('./routes/catalog.routes'));
 app.use('/api/shops', require('./routes/shop.routes'));
 app.use('/api/posts', require('./routes/post.routes'));
 app.use('/api/media', require('./routes/media.routes'));
 
 app.use(notFound);
+// Ces middlewares terminaux convertissent les URL inconnues et erreurs en JSON.
 app.use(errorHandler);
 
 module.exports = app;

@@ -1,5 +1,6 @@
 const { query } = require('../config/db');
 
+// Accès SQL aux boutiques du propriétaire et aux données publiques de leur vitrine.
 async function createShop({ ownerId, name, slug, description, cityId, whatsapp }) {
   const { rows } = await query(
     `INSERT INTO shops (owner_id, name, slug, description, city_id, whatsapp)
@@ -27,6 +28,8 @@ async function findPublicBySlug(slug) {
             COALESCE((
               SELECT jsonb_agg(jsonb_build_object(
                 'id', p.id, 'title', p.title, 'priceFcfa', p.price_fcfa,
+                'description', p.description,
+                'category', (SELECT cat.name FROM categories cat WHERE cat.id = p.category_id),
                 'salePriceFcfa', p.sale_price_fcfa,
                 'saleStartsAt', p.sale_starts_at, 'saleEndsAt', p.sale_ends_at,
                 'currentPriceFcfa', CASE

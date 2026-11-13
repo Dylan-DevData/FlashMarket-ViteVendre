@@ -10,6 +10,7 @@ const { parseOptionalId } = require('../utils/validation');
 
 const PRICE_UNITS = new Set(['unit', 'kg', 'bag', 'carton', 'day', 'month']);
 
+// Valide les filtres HTTP du feed, puis délègue la recherche paginée au modèle SQL.
 async function getFeed(req, res, next) {
   try {
     const nationwide = req.query.city_id === 'all';
@@ -55,6 +56,7 @@ async function getFeed(req, res, next) {
 }
 
 async function create(req, res, next) {
+  // Vérifie les fichiers, crée l'annonce en traitement puis met ses médias en file.
   const files = req.files || [];
   let persisted = false;
   try {
@@ -160,6 +162,7 @@ function parsePostId(value) {
 }
 
 async function verifyMediaSignature(filePath, mimeType) {
+  // Contrôle le contenu réel du fichier : le type MIME fourni par le navigateur n'est pas fiable.
   const handle = await fs.open(filePath, 'r');
   const buffer = Buffer.alloc(16);
   try {
@@ -185,6 +188,7 @@ async function verifyMediaSignature(filePath, mimeType) {
 }
 
 async function buildPostData(body = {}, user) {
+  // Nettoie et valide ville, catégorie, prix et informations du formulaire avant insertion.
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw httpError(400, 'Les informations de l’annonce sont invalides.');
   }

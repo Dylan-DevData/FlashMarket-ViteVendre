@@ -3,11 +3,13 @@ const multer = require('multer');
 
 // Route inconnue
 function notFound(req, res) {
+  // Réponse cohérente pour toute URL qui ne correspond à aucune route déclarée.
   res.status(404).json({ error: `Route introuvable : ${req.method} ${req.originalUrl}` });
 }
 
 // Gestion centralisée des erreurs : les contrôleurs appellent next(err)
 function errorHandler(err, req, res, next) {
+  // Traduit les erreurs en statut HTTP et message JSON sans renvoyer la pile au client.
   if (res.headersSent) return next(err);
 
   const status = err instanceof multer.MulterError

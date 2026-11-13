@@ -1,5 +1,6 @@
 const { query, withTransaction } = require('../config/db');
 
+// Insère une annonce dans une transaction déjà ouverte et renvoie son identifiant.
 async function insertPost(client, post) {
   const shopResult = await client.query(
     `SELECT s.id
@@ -41,6 +42,7 @@ async function insertPost(client, post) {
 }
 
 async function createPostWithMedia(post, mediaItems) {
+  // Enregistre l'annonce et ses lignes média ensemble pour éviter un état partiel en base.
   return withTransaction(async (client) => {
     const postId = await insertPost(client, post);
     const mediaIds = [];
@@ -78,6 +80,7 @@ async function createPostWithMedia(post, mediaItems) {
 }
 
 async function createPostWithUpload(post, upload) {
+  // Finalise l'annonce associée à une vidéo envoyée en plusieurs blocs.
   return withTransaction(async (client) => {
     const postId = await insertPost(client, post);
     const mediaResult = await client.query(
@@ -119,6 +122,7 @@ async function findCategory(categoryId) {
 }
 
 async function getFeed({ cityId, categoryId, search, limit, offset }) {
+  // Retourne les annonces publiées et non expirées selon les filtres et la pagination.
   const values = [];
   const filters = [`p.status = 'published'`, `(p.expires_at IS NULL OR p.expires_at > now())`];
   if (cityId !== null) {
@@ -189,6 +193,7 @@ async function getPendingMedia(afterId = 0) {
 }
 
 async function getPostForViewer(postId, userId) {
+  // Charge la vue détaillée d'une annonce et vérifie la règle d'accès du propriétaire.
   const { rows } = await query(
     `SELECT p.id, p.title, p.description, p.price_fcfa, p.price_unit,
             p.sale_price_fcfa, p.sale_starts_at, p.sale_ends_at,

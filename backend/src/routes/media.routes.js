@@ -5,6 +5,7 @@ const { uploadChunkMaxBytes } = require('../config/env');
 
 const router = express.Router();
 
+// Regroupe la lecture des médias et le cycle de vie des uploads vidéo segmentés.
 router.post(
   '/uploads',
   authenticate,

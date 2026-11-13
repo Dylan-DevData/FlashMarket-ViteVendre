@@ -3,6 +3,7 @@ const { databaseUrl } = require('./env');
 
 const pool = new Pool({ connectionString: databaseUrl, max: 10 });
 
+// Pool PostgreSQL partagé par les modèles; les connexions inactives en erreur sont journalisées.
 pool.on('error', (err) => {
   console.error('[pg] erreur inattendue sur une connexion inactive :', err.message);
 });

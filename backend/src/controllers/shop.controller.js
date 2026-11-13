@@ -2,6 +2,7 @@ const shopModel = require('../models/shop.model');
 const { httpError } = require('../utils/httpError');
 const { isValidPhone, parseOptionalId, slugify } = require('../utils/validation');
 
+// Les contrôleurs valident la requête HTTP; le modèle gère les lectures et écritures SQL.
 async function create(req, res, next) {
   try {
     const body = req.body && typeof req.body === 'object' ? req.body : {};
